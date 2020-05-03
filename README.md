@@ -43,6 +43,21 @@ This will store the results in these items.
 
 For full graphing, follow this tutorial: https://community.openhab.org/t/influxdb-grafana-persistence-and-graphing/13761
 
+# Reality
+In my case I used:
+A ESP-01 from https://www.kjell.com/se/produkter/el-verktyg/arduino/moduler/wifi-modul-for-arduino-esp8266-p87947
+a "Runrain OPEN-SMART USB To ESP8266 ESP-01 Wi-Fi Adapter Module W/ CH340G Driver", as a programmer.
+
+Installed arduino.
+Set the board to generic 8266
+Installed the libraries via library manager: modbusmaster
+Do NOT use the SimpleTimer from the library manager.
+Use this simple timer library: https://github.com/schinken/SimpleTimer
+
+copy config.h-default to config.h and edit it to have your own config.
+Build & Install, your done with the ESP part!
+
+
 # Author
 
 Darren Poulson \<darren.poulson@gmail.com\>
