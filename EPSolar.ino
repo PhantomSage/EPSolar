@@ -26,7 +26,7 @@
 #include <PubSubClient.h>
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
-int timerTask2, timerTask3;
+int timerTask2, timerTask3,timerTask4;
 float ctemp, bvoltage, battChargeCurrent, btemp, bremaining, lpower, lcurrent, pvvoltage, pvcurrent, pvpower;
 float batt_type, batt_cap, batt_highdisc, batt_chargelimit, batt_overvoltrecon, batt_equalvolt, batt_boostvolt, batt_floatvolt, batt_boostrecon;
 float batt_lowvoltrecon, batt_undervoltrecon, batt_undervoltwarn, batt_lowvoltdisc;
@@ -110,6 +110,7 @@ void setup() {
 
   timerTask2 = timer.setInterval(10000, doRegistryNumber);
   timerTask3 = timer.setInterval(10000, nextRegistryNumber);
+  timerTask4 = timer.setInterval(30000, doMQTTAlive);
 }
 
 void reconnect() {
@@ -125,6 +126,11 @@ void reconnect() {
       delay(5000);
     }
   }
+}
+
+
+void doMQTTAlive() {
+    client.publish("EPSolar/1/alive", "EPSolar1 alive");
 }
 
 void doRegistryNumber() {
@@ -254,4 +260,3 @@ void loop() {
   client.loop();
   timer.run();
 }
-
