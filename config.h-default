@@ -7,6 +7,6 @@ const char* mqtt_pass = "mqtt_pass";
 #define OTA_HOSTNAME                    "SOLAR-CHARGE-MONITOR-1"
 #define EPSOLAR_DEVICE_ID    1
 #define MQTT_ROOT                       "EPSolar"
-
+#define TIMEOFFSET 3600
 
 

@@ -1,3 +1,5 @@
+#include <NTPClient.h>
+
 /*
 
     Copyright (C) 2017 Darren Poulson <darren.poulson@gmail.com>
@@ -26,7 +28,7 @@
 #include <PubSubClient.h>
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
-int timerTask2, timerTask3,timerTask4;
+int timerTask2, timerTask3, timerTask4, timerTask5;
 float ctemp, bvoltage, battChargeCurrent, btemp, bremaining, lpower, lcurrent, pvvoltage, pvcurrent, pvpower;
 float batt_type, batt_cap, batt_highdisc, batt_chargelimit, batt_overvoltrecon, batt_equalvolt, batt_boostvolt, batt_floatvolt, batt_boostrecon;
 float batt_lowvoltrecon, batt_undervoltrecon, batt_undervoltwarn, batt_lowvoltdisc;
@@ -34,6 +36,12 @@ uint8_t result;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+
+
+// Define NTP Client to get time
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org"); // Always use UTC, adjust serverside if needed
+
 
 // this is to check if we can write since rs485 is half duplex
 bool rs485DataReceived = true;
@@ -79,7 +87,7 @@ void setup() {
   node.preTransmission(preTransmission);
   node.postTransmission(postTransmission);
   // Port defaults to 8266
-  // ArduinoOTA.setPort(8266);
+  ArduinoOTA.setPort(8266);
 
   // Hostname defaults to esp8266-[ChipID]
   ArduinoOTA.setHostname(OTA_HOSTNAME);
@@ -107,10 +115,13 @@ void setup() {
   ArduinoOTA.begin();
   client.setServer(mqtt_server, 1883);
 
+  timeClient.begin();
 
-  timerTask2 = timer.setInterval(10000, doRegistryNumber);
-  timerTask3 = timer.setInterval(10000, nextRegistryNumber);
-  timerTask4 = timer.setInterval(30000, doMQTTAlive);
+  timerTask2 = timer.setInterval(10  * 1000, doRegistryNumber);
+  timerTask3 = timer.setInterval(10  * 1000, nextRegistryNumber);
+  timerTask4 = timer.setInterval(120 * 1000, doMQTTAlive);
+  timerTask5 = timer.setInterval(60  * 1000, doWifiScan);
+
 }
 
 void reconnect() {
@@ -128,9 +139,44 @@ void reconnect() {
   }
 }
 
-
 void doMQTTAlive() {
-    client.publish("EPSolar/1/alive", "EPSolar1 alive");
+  char tsFromLocal[32];
+  timeClient.update();
+
+  time_t     now;
+  struct tm  ts;
+  char       tbuf[80];
+
+  //time(&now);
+  now = timeClient.getEpochTime();
+  ts = *localtime(&now);
+  strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M:%S %Z", &ts);
+
+  client.publish("EPSolar/1/alive", "EPSolar1");
+  client.publish("EPSolar/1/utctime", tbuf);
+  //    dtostrf(timeClient.getEpochTime(), 2, 1, buf );
+  client.publish("EPSolar/1/epochtime", ltoa(timeClient.getEpochTime(), buf, 10));
+
+
+}
+void doWifiScan() {
+  char wbuf[128];
+  long rssi = WiFi.RSSI();
+  client.publish("EPSolar/1/rssi", ltoa(rssi, buf, 10));
+  int numSsid = WiFi.scanNetworks();
+  if (numSsid == -1)
+  {
+    Serial.println("Couldn't get a wifi connection");
+    return;
+  }
+  for (int thisNet = 0; thisNet < numSsid; thisNet++) {
+    String xbuf = "{\"ssid\":\"" + WiFi.SSID(thisNet) + "\", \"rssi\":" + WiFi.RSSI(thisNet) + ",\"chan\":" + WiFi.channel(thisNet) + ",\"bssid\":\"" + WiFi.BSSIDstr(thisNet) + "\"}";
+    xbuf.toCharArray(wbuf, sizeof(wbuf));
+    client.publish("EPSolar/1/wifiscan", wbuf);
+
+    //    Serial.print("\tEncryption: ");
+    //    printEncryptionType(WiFi.encryptionType(thisNet));
+  }
 }
 
 void doRegistryNumber() {
@@ -141,7 +187,7 @@ void AddressRegistry_3100() {
   result = node.readInputRegisters(0x3100, 10);
   if (result == node.ku8MBSuccess)
   {
-    ctemp = (long)node.getResponseBuffer(0x11) / 100.0f; 
+    ctemp = (long)node.getResponseBuffer(0x11) / 100.0f;
     dtostrf(ctemp, 2, 3, buf );
     //mqtt_location = MQTT_ROOT + "/" + EPSOLAR_DEVICE_ID + "/ctemp";
     client.publish("EPSolar/1/ctemp", buf);
@@ -164,12 +210,12 @@ void AddressRegistry_3100() {
 
     pvcurrent = (long)node.getResponseBuffer(0x01) / 100.0f;
     dtostrf(pvcurrent, 2, 3, buf );
-    client.publish("EPSolar/1/pvcurrent", buf);   
+    client.publish("EPSolar/1/pvcurrent", buf);
 
     pvpower = ((long)node.getResponseBuffer(0x03) << 16 | node.getResponseBuffer(0x02)) / 100.0f;
     dtostrf(pvpower, 2, 3, buf );
     client.publish("EPSolar/1/pvpower", buf);
-    
+
     battChargeCurrent = (long)node.getResponseBuffer(0x05) / 100.0f;
     dtostrf(battChargeCurrent, 2, 3, buf );
     client.publish("EPSolar/1/battChargeCurrent", buf);
@@ -186,11 +232,11 @@ void AddressRegistry_311A() {
     bremaining = node.getResponseBuffer(0x00) / 1.0f;
     dtostrf(bremaining, 2, 3, buf );
     client.publish("EPSolar/1/bremaining", buf);
-    
+
     btemp = node.getResponseBuffer(0x01) / 100.0f;
     dtostrf(btemp, 2, 3, buf );
     client.publish("EPSolar/1/btemp", buf);
-    
+
   } else {
     rs485DataReceived = false;
   }
@@ -205,7 +251,6 @@ void AddressRegistry_9000() {
     batt_cap = node.getResponseBuffer(0x01) / 1.0f;
     dtostrf(batt_cap, 2, 3, buf);
     client.publish("EPSolar/1/batt_cap", buf);
-
     batt_highdisc = node.getResponseBuffer(0x03) / 100.0f;
     dtostrf(batt_highdisc, 2, 3, buf);
     client.publish("EPSolar/1/batt_highdisc", buf);
@@ -220,7 +265,7 @@ void AddressRegistry_9000() {
 
     batt_equalvolt = node.getResponseBuffer(0x06) / 100.0f;
     dtostrf(batt_equalvolt, 2, 3, buf);
-    client.publish("EPSolar/1/batt_equalvolt", buf);    
+    client.publish("EPSolar/1/batt_equalvolt", buf);
 
     batt_boostvolt = node.getResponseBuffer(0x07) / 100.0f;
     dtostrf(batt_boostvolt, 2, 3, buf);
@@ -236,7 +281,7 @@ void AddressRegistry_9000() {
 
     batt_lowvoltrecon = node.getResponseBuffer(0x0A) / 100.0f;
     dtostrf(batt_lowvoltrecon, 2, 3, buf);
-    client.publish("EPSolar/1/batt_lowvoltrecon", buf);    
+    client.publish("EPSolar/1/batt_lowvoltrecon", buf);
 
     batt_undervoltrecon = node.getResponseBuffer(0x0B) / 100.0f;
     dtostrf(batt_undervoltrecon, 2, 3, buf);
