@@ -30,12 +30,14 @@
 
 int timerTask2, timerTask3;
 int timerTask4, timerTask5, timerTask6;
+int wifip = 0;
 float ctemp, bvoltage, battChargeCurrent, btemp, bremaining, lpower, lcurrent, pvvoltage, pvcurrent, pvpower;
 float batt_type, batt_cap, batt_highdisc, batt_chargelimit, batt_overvoltrecon, batt_equalvolt, batt_boostvolt, batt_floatvolt, batt_boostrecon;
 float batt_lowvoltrecon, batt_undervoltrecon, batt_undervoltwarn, batt_lowvoltdisc;
 uint8_t result;
 bool mqtt_connected = false;
 unsigned long startTime = 0;
+int otaInit=0;
 
 
 #ifdef UNSECURE_MQTT
@@ -78,21 +80,52 @@ void nextRegistryNumber() {
   currentRegistryNumber = (currentRegistryNumber + 1) % ARRAY_SIZE( Registries);
 }
 
+IPAddress local_IP(11,11,11,254);
+IPAddress gateway(11,11,11,254);
+IPAddress subnet(255,255,255,0);
+WiFiServer server(8088);
+//WiFiClient client=false;
+
 void setup() {
   Serial.begin(115200);
   Serial.println("Booting");
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    Serial.println("Connection Failed! Rebooting...");
-    delay(5000);
-    ESP.restart();
-  }
+
+  Serial.println(WiFi.softAPConfig(local_IP, gateway, subnet) ? "" : "Failed!");
+  Serial.println(WiFi.softAP("eBox-WIFI-01") ? "" : "Failed!");
+
+  Serial.print("Soft-AP IP address = ");
+  Serial.println(WiFi.softAPIP());
+    
+
+  // Start Wifi, will be monitored by state-engine
+//  WiFi.mode(WIFI_STA);
+  WiFi.begin(wifi_networks[wifip], wifi_networks[wifip + 1]);
+
+  setupModbus();
+
+
+  espClient.setInsecure(); // TLS, but no certificate mgmt.
+  client.setServer(mqtt_server, 8883);
+
+  timeClient.begin();
+
+  timerTask2 = timer.setInterval(10  * 1000, doRegistryNumber);
+  timerTask3 = timer.setInterval(10  * 1100, nextRegistryNumber);
+  timerTask4 = timer.setInterval(19 * 1000, doMQTTAlive);
+  timerTask5 = timer.setInterval(60  * 1000, doWifiScan);
+
+  timerTask6 = timer.setInterval(7  * 1000, doStateEngine); // dont run to fast, need time to connec to wifi a.o.t.
+
+}
+void setupModbus() {
   // Modbus slave ID 1
   node.begin(EPSOLAR_DEVICE_ID, Serial);
   node.preTransmission(preTransmission);
   node.postTransmission(postTransmission);
-  // Port defaults to 8266
+}
+
+void setupOTA() {
+  // Enable OTA
   ArduinoOTA.setPort(8266);
 
   // Hostname defaults to esp8266-[ChipID]
@@ -119,22 +152,37 @@ void setup() {
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
   });
   ArduinoOTA.begin();
-  espClient.setInsecure();
-
-  client.setServer(mqtt_server, 8883);
-
-  timeClient.begin();
-
-  timerTask2 = timer.setInterval(10  * 1000, doRegistryNumber);
-  timerTask3 = timer.setInterval(10  * 1100, nextRegistryNumber);
-  timerTask4 = timer.setInterval(19 * 1000, doMQTTAlive);
-  timerTask5 = timer.setInterval(60  * 1000, doWifiScan);
-
-  timerTask6 = timer.setInterval(5  * 1000, doStateEngine);
 
 }
 
 void doStateEngine() {
+  if (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Not connected to wifi...");
+    //    delay(5000);
+    //  WiFi.begin(wifi_networks[wifip], wifi_networks[wifip+1]);
+    //    ESP.restart();
+    WiFi.disconnect();
+    delay(500);
+    wifip += 2;
+    if (strcmp(wifi_networks[wifip],"")==0) {
+      wifip = 0;
+    }
+    Serial.print("Connecting to wifi:");
+    Serial.print(wifip);
+    Serial.print(":");
+    Serial.print(wifi_networks[wifip]);
+    Serial.print(":");
+    Serial.println(wifi_networks[wifip + 1]);
+
+
+    WiFi.begin(wifi_networks[wifip], wifi_networks[wifip + 1]);
+  } else {
+  if (otaInit==0) {
+    setupOTA();
+    otaInit=1;
+  }
+  }
+
   if (!client.connected()) {
     mqtt_connected = false;
     Serial.println("Connecting to mqtt");
@@ -171,10 +219,8 @@ void doMQTTAlive() {
 
   client.publish("EPSolar/1/alive", "EPSolar1 1.002");
   client.publish("EPSolar/1/utctime", tbuf);
-  //    dtostrf(timeClient.getEpochTime(), 2, 1, buf );
   client.publish("EPSolar/1/epochtime", ltoa(timeClient.getEpochTime(), buf, 10));
   client.publish("EPSolar/1/uptime", ltoa(timeClient.getEpochTime() - startTime, buf, 10));
-
 
 }
 void doWifiScan() {
@@ -317,4 +363,16 @@ void loop() {
   ArduinoOTA.handle();
   client.loop();
   timer.run();
+ WiFiClient c2 = server.available();
+  if (c2) {
+    
+    if (c2.connected()) {
+      Serial.println("Connected to client");
+      c2.write("w");
+    }
+
+    // close the connection:
+    c2.stop();
+  }
+  
 }
