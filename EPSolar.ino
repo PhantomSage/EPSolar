@@ -1,5 +1,3 @@
-#include <NTPClient.h>
-
 /*
 
     Copyright (C) 2017 Darren Poulson <darren.poulson@gmail.com>
@@ -26,17 +24,27 @@
 #include <SimpleTimer.h>
 #include <ModbusMaster.h>
 #include <PubSubClient.h>
+#include <NTPClient.h>
+
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
-int timerTask2, timerTask3, timerTask4, timerTask5;
+int timerTask2, timerTask3;
+int timerTask4, timerTask5, timerTask6;
 float ctemp, bvoltage, battChargeCurrent, btemp, bremaining, lpower, lcurrent, pvvoltage, pvcurrent, pvpower;
 float batt_type, batt_cap, batt_highdisc, batt_chargelimit, batt_overvoltrecon, batt_equalvolt, batt_boostvolt, batt_floatvolt, batt_boostrecon;
 float batt_lowvoltrecon, batt_undervoltrecon, batt_undervoltwarn, batt_lowvoltdisc;
 uint8_t result;
+bool mqtt_connected = false;
+unsigned long startTime = 0;
 
+
+#ifdef UNSECURE_MQTT
 WiFiClient espClient;
 PubSubClient client(espClient);
-
+#else
+WiFiClientSecure espClient;     // <-- Change #1: Secure connection to MQTT Server
+PubSubClient client(espClient);
+#endif
 
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
@@ -45,12 +53,10 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org"); // Always use UTC, adjust serversi
 
 // this is to check if we can write since rs485 is half duplex
 bool rs485DataReceived = true;
-
 ModbusMaster node;
 SimpleTimer timer;
 
 char buf[10];
-String value;
 char mptt_location[16];
 
 // tracer requires no handshaking
@@ -113,29 +119,37 @@ void setup() {
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
   });
   ArduinoOTA.begin();
-  client.setServer(mqtt_server, 1883);
+  espClient.setInsecure();
+
+  client.setServer(mqtt_server, 8883);
 
   timeClient.begin();
 
   timerTask2 = timer.setInterval(10  * 1000, doRegistryNumber);
-  timerTask3 = timer.setInterval(10  * 1000, nextRegistryNumber);
-  timerTask4 = timer.setInterval(120 * 1000, doMQTTAlive);
+  timerTask3 = timer.setInterval(10  * 1100, nextRegistryNumber);
+  timerTask4 = timer.setInterval(19 * 1000, doMQTTAlive);
   timerTask5 = timer.setInterval(60  * 1000, doWifiScan);
+
+  timerTask6 = timer.setInterval(5  * 1000, doStateEngine);
 
 }
 
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
+void doStateEngine() {
+  if (!client.connected()) {
+    mqtt_connected = false;
+    Serial.println("Connecting to mqtt");
     if (client.connect("EPSolar1", mqtt_user, mqtt_pass)) {
       Serial.println("connected");
       // Once connected, publish an announcement...
+      mqtt_connected = true;
     } else {
-      // Wait 5 seconds before retrying
-      delay(5000);
+      Serial.print("Failed to connect");
+      Serial.print(mqtt_user);
+      Serial.print(":");
+      Serial.println(mqtt_pass);
     }
+  } else {
+    mqtt_connected = true;
   }
 }
 
@@ -149,18 +163,23 @@ void doMQTTAlive() {
 
   //time(&now);
   now = timeClient.getEpochTime();
+  if (startTime == 0 && now > 1000) {
+    startTime = now;
+  }
   ts = *localtime(&now);
   strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M:%S %Z", &ts);
 
-  client.publish("EPSolar/1/alive", "EPSolar1");
+  client.publish("EPSolar/1/alive", "EPSolar1 1.002");
   client.publish("EPSolar/1/utctime", tbuf);
   //    dtostrf(timeClient.getEpochTime(), 2, 1, buf );
   client.publish("EPSolar/1/epochtime", ltoa(timeClient.getEpochTime(), buf, 10));
+  client.publish("EPSolar/1/uptime", ltoa(timeClient.getEpochTime() - startTime, buf, 10));
 
 
 }
 void doWifiScan() {
   char wbuf[128];
+  if (!mqtt_connected) return; // No reason to execute if not connected to mqtt
   long rssi = WiFi.RSSI();
   client.publish("EPSolar/1/rssi", ltoa(rssi, buf, 10));
   int numSsid = WiFi.scanNetworks();
@@ -173,9 +192,6 @@ void doWifiScan() {
     String xbuf = "{\"ssid\":\"" + WiFi.SSID(thisNet) + "\", \"rssi\":" + WiFi.RSSI(thisNet) + ",\"chan\":" + WiFi.channel(thisNet) + ",\"bssid\":\"" + WiFi.BSSIDstr(thisNet) + "\"}";
     xbuf.toCharArray(wbuf, sizeof(wbuf));
     client.publish("EPSolar/1/wifiscan", wbuf);
-
-    //    Serial.print("\tEncryption: ");
-    //    printEncryptionType(WiFi.encryptionType(thisNet));
   }
 }
 
@@ -299,9 +315,6 @@ void AddressRegistry_9000() {
 
 void loop() {
   ArduinoOTA.handle();
-  if (!client.connected()) {
-    reconnect();
-  }
   client.loop();
   timer.run();
 }
