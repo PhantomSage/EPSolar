@@ -44,6 +44,7 @@ This will store the results in these items.
 
 For full graphing, follow this tutorial: https://community.openhab.org/t/influxdb-grafana-persistence-and-graphing/13761
 
+
 # The fork
 This fork is made by PhanomSage, all credit where credit is due to the original deverlopers. 
 
@@ -56,6 +57,8 @@ This fork is made by PhanomSage, all credit where credit is due to the original 
 * inteligent loging to jiffs filesystem when no upstread is available
 * SoftAP + STA, to allow for local wifi2modbus
 * modbus2mqtt bridge
+* manual on/off (coil handling over mqtt)
+* full remote OTA, not only local OTA
 
 # Real case
 To aid others, I thought I write down my setup
@@ -63,7 +66,6 @@ To aid others, I thought I write down my setup
 ## ESP8266 hardware
 I use a ESP-01 from https://www.kjell.com/se/produkter/el-verktyg/arduino/moduler/wifi-modul-for-arduino-esp8266-p87947
 and a Runrain OPEN-SMART USB To ESP8266 ESP-01 Wi-Fi Adapter Module W/ CH340G Driver" programmer.
-
 
 ## ESP8266 flashing
 
@@ -80,6 +82,9 @@ Build & Install, your done with the ESP part!
 I use one of thiese to bridge between ESP8266 and RS485, very nifty little box.
 https://www.tindie.com/products/plop211/epever-rs485-to-wifi-adaptor-new-revision/
 
+
+# Reference material used:
+https://github.com/kasbert/epsolar-tracer/blob/master/pyepsolartracer/registers.py
 
 
 # Author
