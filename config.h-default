@@ -1,12 +1,17 @@
-const char* ssid = "your_ssid";
-const char* password = "your_wifi_password";
 const char* mqtt_server = "your_mqtt_server";
 const char* mqtt_user = "mqtt_user";
 const char* mqtt_pass = "mqtt_pass";
 
+
+const char  wifi_networks[][32] ={ // DO NOT forget the , at the end of the line!
+    "FirstNet","FirstNetPW",
+    "SecondNet","SecondNetPW",
+    "","" // Leave a AP with empty ap/pw to signal end of active list. You can have more AP's, but they will not be tested.
+};
+
+
 #define OTA_HOSTNAME                    "SOLAR-CHARGE-MONITOR-1"
 #define EPSOLAR_DEVICE_ID    1
 #define MQTT_ROOT                       "EPSolar"
-#define TIMEOFFSET 3600
 
 

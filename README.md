@@ -1,4 +1,4 @@
-# Overview 
+﻿# Overview 
 
 This is a fork https://github.com/dpoulson/EPSolar , lets see if I modify anything.
 All credit to where it is due.
@@ -7,6 +7,7 @@ This project is to connect an EPSolar/EPEver Tracer Solar Charge Controller to a
 
 # Hardware
 I am developing this on a NodeMCU v1, but see no reason why it won't work with other similar hardware.
+The fork is executed on a ESP-01 as stated below.
 
 # MQTT
 By default, this will write to queues under:
@@ -42,6 +43,19 @@ You will need the MQTT binding installed and configured to connect to the same M
 This will store the results in these items. 
 
 For full graphing, follow this tutorial: https://community.openhab.org/t/influxdb-grafana-persistence-and-graphing/13761
+
+# The fork
+This fork is made by PhanomSage, all credit where credit is due to the original deverlopers. 
+
+## What this fork brings:
+* multi-wifi, it has a list of different wifi networks that it will try to connect to
+* wifi-scan, it will scan it's surrounding wifi networks to enable automatic detection and logging where it is. E.g. on a mobile installation like a boat, it will be able to tell the server side if it is in the harbour or not.
+* More info/statistics in a hearbeat
+
+##Potential future:
+* inteligent loging to jiffs filesystem when no upstread is available
+* SoftAP + STA, to allow for local wifi2modbus
+* modbus2mqtt bridge
 
 # Real case
 To aid others, I thought I write down my setup
